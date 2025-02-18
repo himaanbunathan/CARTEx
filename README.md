@@ -11,6 +11,6 @@ To install the package from GitHub, use the `devtools` package:
 install.packages("devtools")
 
 # Install CARTEx from GitHub
-devtools::install_github("yourusername/CARTEx")
+devtools::install_github("himaanbunathan/CARTEx")
 
 
