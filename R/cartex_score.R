@@ -33,7 +33,7 @@ cartex_score <- function(gene_counts, metadata=NULL) {
   cartex_200 <- readRDS(precomputed_weights)
 
   common <- intersect(names(cartex_200), rownames(gene_counts))
-  print(paste0("Num of genes used for cartex score = ", length(common)))
+  # print(paste0("Num of genes used for cartex score = ", length(common)))
 
   Zscore <- function(s) {
     s <- as.numeric(s)
@@ -46,6 +46,8 @@ cartex_score <- function(gene_counts, metadata=NULL) {
     return(list(scores = NULL, matched_genes = character(0)))
 
   } else {
+    
+    print(paste0("Num of genes used for cartex score = ", length(common)))
 
     expr = t(gene_counts[match(common, rownames(gene_counts)),])
     expr = expr[,order(colnames(expr))]

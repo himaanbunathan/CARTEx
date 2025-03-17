@@ -3,4 +3,6 @@
 export(cartex_score)
 export(compute_score)
 export(get_weights)
+export(single_cell_cartex)
+import(Seurat)
 import(stats)
