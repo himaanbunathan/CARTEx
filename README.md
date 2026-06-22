@@ -15,7 +15,7 @@ install.packages("BiocManager")
 BiocManager::install("rhdf5")
 
 # Install CARTEx from GitHub
-devtools::install_github("yourusername/CARTEx")
+devtools::install_github("himaanbunathan/CARTEx")
 ```
 
 ### Bulk RNA-seq
