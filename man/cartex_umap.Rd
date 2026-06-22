@@ -10,7 +10,8 @@ cartex_umap(
   annotation = NULL,
   score = "cartex_score",
   compute = TRUE,
-  cd8_only = FALSE,
+  cd8_only = TRUE,
+  renormalize = FALSE,
   na_colour = "grey85",
   point_size = 0.4,
   file = NULL
@@ -31,12 +32,21 @@ CD8 annotation column from the report, else a detected cell-type column.}
 \item{compute}{If \code{TRUE} (default), compute a UMAP for a Seurat object that
 lacks one. Has no effect for data.frame input (the full matrix is not loaded).}
 
-\item{cd8_only}{If \code{TRUE}, keep every cell on both panels but show the CARTEx
-score on the right panel only for CD8+ T cells (re-normalized within the CD8
-population), greying all other cell types. Requires a \code{cd8_status} column
-(present in any \code{cartex_sc()} result). Default \code{FALSE}.}
+\item{cd8_only}{If \code{TRUE} (default), the CARTEx score is shown on the right
+panel only for CD8+ T cells; every other cell type (CD8-negative, ambiguous,
+non-T, unknown) is greyed, because the CARTEx score is only biologically
+valid for CD8+ T cells and colouring other cells by it is misleading. All
+cells are still drawn on both panels, so the population context is preserved.
+Set \code{cd8_only = FALSE} to colour every cell by its score. Requires a
+\code{cd8_status} column (present in any \code{cartex_sc()} result).}
 
-\item{na_colour}{Colour for cells without a score when \code{cd8_only = TRUE}
+\item{renormalize}{If \code{TRUE} and \code{cd8_only = TRUE}, re-Z-score the raw
+per-cell score \emph{within the CD8+ population} before plotting, so the colour
+scale reflects variation among the cells CARTEx is valid for rather than the
+whole-object distribution (which is diluted by unscored non-CD8 cells).
+Default \code{FALSE} (show the score column as computed, just masked).}
+
+\item{na_colour}{Colour for cells that are not scored on the right panel
 (default "grey85").}
 
 \item{point_size}{Point size (default 0.4).}

@@ -117,11 +117,19 @@
 #' @param score Score column for the right panel (default `"cartex_score"`).
 #' @param compute If `TRUE` (default), compute a UMAP for a Seurat object that
 #'   lacks one. Has no effect for data.frame input (the full matrix is not loaded).
-#' @param cd8_only If `TRUE`, keep every cell on both panels but show the CARTEx
-#'   score on the right panel only for CD8+ T cells (re-normalized within the CD8
-#'   population), greying all other cell types. Requires a `cd8_status` column
-#'   (present in any `cartex_sc()` result). Default `FALSE`.
-#' @param na_colour Colour for cells without a score when `cd8_only = TRUE`
+#' @param cd8_only If `TRUE` (default), the CARTEx score is shown on the right
+#'   panel only for CD8+ T cells; every other cell type (CD8-negative, ambiguous,
+#'   non-T, unknown) is greyed, because the CARTEx score is only biologically
+#'   valid for CD8+ T cells and colouring other cells by it is misleading. All
+#'   cells are still drawn on both panels, so the population context is preserved.
+#'   Set `cd8_only = FALSE` to colour every cell by its score. Requires a
+#'   `cd8_status` column (present in any `cartex_sc()` result).
+#' @param renormalize If `TRUE` and `cd8_only = TRUE`, re-Z-score the raw
+#'   per-cell score *within the CD8+ population* before plotting, so the colour
+#'   scale reflects variation among the cells CARTEx is valid for rather than the
+#'   whole-object distribution (which is diluted by unscored non-CD8 cells).
+#'   Default `FALSE` (show the score column as computed, just masked).
+#' @param na_colour Colour for cells that are not scored on the right panel
 #'   (default "grey85").
 #' @param point_size Point size (default 0.4).
 #' @param file Optional path to save the figure (png/pdf via `ggplot2::ggsave`).
@@ -129,26 +137,39 @@
 #' @export
 cartex_umap <- function(x, input = NULL, annotation = NULL,
                         score = "cartex_score", compute = TRUE,
-                        cd8_only = FALSE, na_colour = "grey85",
+                        cd8_only = TRUE, renormalize = FALSE,
+                        na_colour = "grey85",
                         point_size = 0.4, file = NULL) {
   .need_pkg(c("ggplot2", "patchwork"), "cartex_umap")
   df <- .build_plot_df(x, input, annotation, score, compute)
   ann_col <- attr(df, "annotation_col")
 
   score_title <- "CARTEx score"
+  n_masked <- 0L
   if (cd8_only) {
     if (all(is.na(df$cd8_status)))
-      stop("cd8_only = TRUE needs a 'cd8_status' column; none found in the result.")
+      stop("cd8_only = TRUE needs a 'cd8_status' column; none found in the ",
+           "result. Pass cd8_only = FALSE to colour every cell by its score.")
     is_cd8 <- !is.na(df$cd8_status) & df$cd8_status == "CD8_pos"
-    if (!all(is.na(df$raw))) {
-      # Re-normalize (Z-score) the raw per-cell score within CD8+ cells only.
+    n_masked <- sum(!is_cd8)
+    if (renormalize && !all(is.na(df$raw))) {
+      # Re-Z-score the raw per-cell score within CD8+ cells only, so the colour
+      # scale reflects variation among the cells CARTEx is valid for.
       z <- rep(NA_real_, nrow(df))
       z[is_cd8] <- .zscore(df$raw[is_cd8])
       df$score <- z
+      score_title <- "CARTEx score\n(CD8+, re-normalized)"
     } else {
+      # Mask: keep the computed score, but show it for CD8+ T cells only.
       df$score[!is_cd8] <- NA_real_
+      score_title <- "CARTEx score\n(CD8+ T cells)"
     }
-    score_title <- "CARTEx score\n(CD8+ T cells)"
+    if (n_masked)
+      message(sprintf(
+        "cartex_umap: %d of %d cells are not CD8+ T cells; greying them on the ",
+        n_masked, nrow(df)),
+        "score panel (CARTEx is only valid for CD8+ T cells). ",
+        "Use cd8_only = FALSE to colour all cells.")
     # Draw greyed (non-CD8) cells first so scored CD8 cells sit on top.
     df <- df[order(!is.na(df$score)), ]
   }
