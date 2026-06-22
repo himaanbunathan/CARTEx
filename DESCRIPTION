@@ -3,13 +3,29 @@ Title: CAR-T based exhaustion score
 Version: 0.0.0.9000
 Authors@R: 
     person("Hima", "Anbunathan", email = "hima.anbunathan@gmail.com", role = c("aut", "cre"), comment = c(ORCID = "0000-0002-8458-4845"))
-Description: Quantifies exhaustion profile for CD8+ T cells. The package also provides a pca based method to compute phenotype specific score for each gene.
+Description: Quantifies exhaustion profile for CD8+ T cells. The package also
+    provides a pca based method to compute phenotype specific score for each
+    gene, and scores single-cell objects (Seurat, AnnData/.h5ad, .h5Seurat,
+    .loom) memory-efficiently with a transparent report of the assumptions
+    behind each per-cell score.
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-Imports: 
-    stats
+Imports:
+    stats,
+    Matrix,
+    tools
 License: MIT + file LICENSE
-Suggests: 
-    testthat (>= 3.0.0)
+Suggests:
+    testthat (>= 3.0.0),
+    rhdf5,
+    SeuratObject,
+    Seurat,
+    ggplot2,
+    patchwork,
+    htmltools,
+    base64enc,
+    knitr,
+    rmarkdown
 Config/testthat/edition: 3
+VignetteBuilder: knitr

@@ -1,0 +1,197 @@
+---
+title: "Scoring single-cell data with CARTEx"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Scoring single-cell data with CARTEx}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+## Overview
+
+`cartex_sc()` applies the published CARTEx CD8+ T-cell exhaustion signature
+(200 PCA-weighted genes) to **single-cell** data. It is designed to:
+
+- read several formats — `.rds`, `.RData`, `.h5ad` (AnnData), `.h5Seurat`,
+  `.loom` — or an in-memory Seurat object / matrix;
+- run on a laptop: for the HDF5 formats it streams only the ~200 CARTEx genes
+  off disk instead of loading the whole matrix or building a full object;
+- be **transparent**: every decision (which layer was used, whether the data
+  were raw counts or normalized, how genes were matched, what QC metadata is
+  present) is captured in a `cartex_report` you can inspect.
+
+## Installation
+
+The HDF5 readers need the Bioconductor package **rhdf5** (it bundles its own
+HDF5 library, so it installs cleanly on Mac/Windows/Linux):
+
+```{r}
+install.packages("BiocManager")
+BiocManager::install("rhdf5")
+# devtools::install_github("yourusername/CARTEx")
+```
+
+`.rds`/`.RData` Seurat objects only need `SeuratObject`.
+
+## Quick start
+
+```{r}
+library(CARTEx)
+
+# Any supported path, or an in-memory Seurat object / matrix
+obj <- cartex_sc("pbmc.h5ad")
+
+# Per-cell scores were added to the cell metadata:
+head(obj$cartex_score)       # Z-scored across cells (headline value)
+head(obj$cartex_score_raw)   # raw weighted dot-product
+
+# The transparency report:
+report <- attr(obj, "cartex_report")
+print(report)
+```
+
+For a Seurat object you get the object back with `cartex_score` /
+`cartex_score_raw` / `cartex_score_int` and a `cd8_status` column in `meta.data`,
+ready for `FeaturePlot()`, `VlnPlot(obj, "cartex_score")`, etc. For the streaming
+HDF5 path (no live Seurat object) you get a data.frame of scores joined to the
+cell metadata.
+
+## Restricting to CD8+ T cells
+
+CARTEx is only valid for CD8+ T cells, so every cell is classified before
+scoring. By default (`cd8 = "flag"`) all cells are scored and a `cd8_status`
+column records the call; set `cd8 = "restrict"` to score only confident CD8+
+T cells.
+
+```{r}
+# Score all cells but label them (default):
+obj <- cartex_sc("pbmc.h5ad")
+table(obj$cd8_status)
+
+# Score ONLY confident CD8+ T cells:
+cd8 <- cartex_sc("pbmc.h5ad", cd8 = "restrict")
+```
+
+How cells are classified (`cd8_method`):
+
+- `"auto"` (default) — use a cell-type annotation column if one is recognizable
+  (most reliable); otherwise gate on marker genes.
+- `"metadata"` — annotation column only (set `cd8_column` to force a column).
+- `"markers"` — gate on expression: CD8A/CD8B positive **and** CD3 positive
+  **and** CD4 negative. (CD3 is required because NK cells also express CD8A.)
+- `"none"` — skip classification.
+
+Cells that cannot be resolved are labelled rather than guessed:
+`ambiguous_dropout` (no CD8 or CD4 detected — common with sparse data),
+`ambiguous_doublet` (both detected), `ambiguous_generic` (a bare "T cell"
+label), or `non_T`. The report prints the full composition so you can see how
+many cells were confidently CD8+. Marker gating is conservative: dropout means a
+true CD8 cell can read zero for CD8A, which is exactly why the annotation path is
+preferred when available.
+
+## Pseudobulk analysis
+
+When cluster/cell-type information is available you can score at the pseudobulk
+level instead of per cell. Following the reference CARTEx pipeline, cells are
+grouped, their **raw counts are summed**, the pseudobulk profiles are
+LogNormalized, and then scored.
+
+```{r}
+# One pseudobulk profile per cluster:
+pb <- cartex_sc("pbmc.h5ad", level = "pseudobulk", group_by = "seurat_clusters")
+
+# CD8-only, with random replicate bins per group (as in the reference):
+pb <- cartex_sc("pbmc.h5ad", level = "pseudobulk", group_by = "seurat_clusters",
+                cd8 = "restrict", pseudo_replicates = 4)
+```
+
+`group_by` may name one or more metadata columns; if omitted, a cluster-like
+column is auto-detected. With `pseudo_replicates > 1`, each group is randomly
+split into that many replicate pseudobulk samples (reproducible via `seed`).
+When the input is a Seurat object, each cell also receives its group's score in
+`cartex_pseudobulk` for UMAP overlays, and the per-group table is attached as
+`attr(obj, "cartex_pseudobulk_scores")`.
+
+## How the score is defined
+
+For each cell, the **raw** score is the dot product of its log-normalized
+expression with the 200 CARTEx PCA weights. The headline `cartex_score` is that
+value **Z-scored across all cells in the object** — matching the bulk
+[`cartex_score()`] convention.
+
+> **Caveat.** Because the Z-score is population-relative, `cartex_score` is only
+> comparable *within* a single scored object, not across datasets scored
+> separately. Use `cartex_score_raw` if you need an absolute per-cell quantity.
+
+## Visualizing on a UMAP
+
+`cartex_umap()` draws a side-by-side UMAP from a `cartex_sc()` result — the same
+coordinates coloured by cell annotation (left) and by CARTEx score (right):
+
+```{r}
+res <- cartex_sc("pbmc.h5ad")
+cartex_umap(res)                       # returns a ggplot/patchwork object
+cartex_umap(res, file = "umap.png")    # or save to file
+```
+
+It reuses an existing UMAP embedding when one is present — a Seurat `umap`
+reduction, an AnnData `obsm/X_umap`, or `UMAP_1`/`UMAP_2` metadata columns. If a
+**Seurat object has no UMAP**, one is computed with default Seurat parameters
+(`NormalizeData → FindVariableFeatures → ScaleData → RunPCA → RunUMAP`). (For the
+streaming HDF5 path no full matrix is loaded, so a UMAP cannot be computed from
+scratch — it must already exist in the file.)
+
+## HTML report
+
+`cartex_html_report()` writes a self-contained HTML summary of the run (no pandoc
+required), optionally embedding the UMAP figure:
+
+```{r}
+cartex_html_report(res, file = "cartex_report.html")
+```
+
+The report captures input provenance, gene matching, CD8 composition, the
+normalization decision, QC fields, the score summary, and any warnings.
+
+## Transparency: checking your assumptions
+
+The report exists because a per-cell score inherits every preprocessing choice
+already baked into your object. It records:
+
+- **Gene matching** — how many of the 200 genes were found and by which rule
+  (exact symbol, cleaned symbol, or Ensembl ID), plus the unmatched list.
+  CARTEx matches Ensembl IDs too, so CELLxGENE-style `.h5ad` files that key on
+  Ensembl still score fully.
+- **Normalization** — CARTEx inspects the actual values (not just the declared
+  label, which is often wrong) to decide raw counts vs log-normalized, and only
+  applies `LogNormalize` when the data look like counts. Library sizes for
+  normalization are computed across *all* genes, even on the streaming path.
+- **QC metadata** — detected `nFeature`/`nCount`/`percent.mt` columns with their
+  ranges, and a heuristic flag for whether QC filtering looks already applied.
+  If these are absent (as in many CELLxGENE exports), the report says so — a
+  prompt to confirm upstream filtering yourself.
+
+## Controlling behaviour
+
+```{r}
+# Force assume-normalized (skip detection):
+cartex_sc("obj.rds", normalization = "assume_normalized")
+
+# Force LogNormalize:
+cartex_sc("obj.rds", normalization = "lognorm")
+
+# Pick a specific assay / layer:
+cartex_sc(seurat_obj, assay = "RNA", layer = "data")
+
+# Just the report, or just the scores:
+cartex_sc("obj.h5ad", return = "report")
+cartex_sc("obj.h5ad", return = "scores")
+```
+
+## Bulk data
+
+For bulk RNA-seq (genes × samples), keep using [`cartex_score()`] directly.
