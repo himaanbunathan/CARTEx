@@ -14,8 +14,8 @@ install.packages("devtools")
 install.packages("BiocManager")
 BiocManager::install("rhdf5")
 
-# Install CARTEx from GitHub
-devtools::install_github("himaanbunathan/CARTEx")
+# Install CARTEx from GitHub (build_vignettes = TRUE makes vignette("cartex-single-cell") available)
+devtools::install_github("himaanbunathan/CARTEx", build_vignettes = TRUE)
 ```
 
 ### Bulk RNA-seq
